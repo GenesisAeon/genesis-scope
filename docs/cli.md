@@ -1,88 +1,57 @@
 # CLI Reference
 
-## `diamond scaffold`
+## `scope status`
 
-Create a new project from a template.
+Run a collaboration cycle and print the resulting scope status as JSON.
 
 ```
-Usage: diamond scaffold [OPTIONS] PROJECT_NAME
-
-Arguments:
-  PROJECT_NAME  Name of the new project (kebab-case recommended)
+Usage: scope status [OPTIONS]
 
 Options:
-  -t, --template TEXT       Template to use [default: minimal]
-  -o, --output-dir PATH     Parent directory for the new project
-  --author TEXT             Author name
-  --description TEXT        Short project description
-  --python-version TEXT     Minimum Python version (e.g. 3.11)
-  --dry-run                 Preview files without writing them
+  --n-sessions INTEGER  Number of sessions to simulate [default: 38]
 ```
 
-**Examples**
-
 ```bash
-# Minimal project in the current directory
-diamond scaffold my-lib
-
-# Genesis preset with custom author
-diamond scaffold my-physics-tool --template genesis --author "Ada Lovelace"
-
-# Preview what would be created
-diamond scaffold my-lib --dry-run
-
-# Output to a specific directory
-diamond scaffold my-lib --output-dir ~/projects
+scope status
+scope status --n-sessions 10
 ```
 
 ---
 
-## `diamond list-templates`
+## `scope drift`
 
-List all available templates with their descriptions.
+Simulate the semantic drift model with and without anchors.
+
+```
+Usage: scope drift [OPTIONS]
+
+Options:
+  --n-steps INTEGER  Number of time steps to simulate [default: 10]
+  --kappa FLOAT      Drift rate [default: 0.3]
+  --lambda- FLOAT    Anchor damping [default: 0.8]
+```
 
 ```bash
-diamond list-templates
+scope drift --n-steps 20
 ```
 
 ---
 
-## `diamond validate`
+## `scope benchmark`
 
-Validate a project directory against diamond-setup best practices.
-
-```
-Usage: diamond validate [PATH]
-
-Arguments:
-  PATH  Project directory to validate [default: current directory]
-```
-
-Checks performed:
-
-| Check | Level |
-|-------|-------|
-| `pyproject.toml` present | **Error** |
-| `src/` layout present | Warning |
-| `tests/` directory present | Warning |
-| `.github/workflows/` present | Warning |
-| `README.md` present | Warning |
-| `.gitignore` present | Warning |
+Evaluate the current model against `SCOPE_TARGETS`.
 
 ```bash
-# Validate the current directory
-diamond validate
-
-# Validate a specific project
-diamond validate path/to/my-project
+scope benchmark
 ```
 
 ---
 
-## `diamond version`
+## `scope anchor`
 
-Print the installed version.
+List the registered semantic anchors (Sigillin) with their compression
+ratio and strength.
 
 ```bash
-diamond version
+scope anchor
 ```
