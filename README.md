@@ -1,85 +1,87 @@
-# diamond-setup
+# genesis-scope
 
-**Universal Python project scaffold** — generate professional, CI-ready skeletons in seconds.
+**Semantic coordination system for human-LLM collaboration** — GenesisAeon Package 39.
 
-[![CI](https://github.com/GenesisAeon/diamond-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/GenesisAeon/diamond-setup/actions/workflows/ci.yml)
+[![CI](https://github.com/GenesisAeon/genesis-scope/actions/workflows/ci.yml/badge.svg)](https://github.com/GenesisAeon/genesis-scope/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-
-No cookiecutter, no Jinja2, no magic. Just a clean CLI that produces a fully working project — `uv sync`, `pytest`, ruff, pre-commit and CI all wired up from second one.
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.17472834-blue)](https://doi.org/10.5281/zenodo.17472834)
 
 ---
 
-## Install
+## Mission
+
+A human integrates **temporally** — meaning emerges from a continuous,
+ordered stream of experience. An LLM navigates **atemporally** — it
+collapses a probability space in a single step, with no continuous
+experience stream of its own.
+
+`genesis-scope` is the explicit, executable geometry of the shared space
+between these two asynchronous processes. It models:
+
+- **Semantic anchors** (Sigillin) — compressed state markers that reduce
+  meaning drift between sessions (`semantic_anchor.py`).
+- **Drift model** — `dD/dt = -kappa * (D - D*)`, the relaxation of shared
+  semantic state toward a fixed point `D* = (lambda/kappa) * A_avg`
+  set by the registered anchors (`drift_model.py`).
+- **Coordination space** — the `(tau_A, tau_H, Sigma)` coordinate system:
+  action time, human time, and semantic density (`coordination_space.py`).
+- **Collaboration CREP** — `Gamma_collab = (C * R * E * P) ** 0.25`, the
+  coherence metric for a collaboration session (`crep_collaboration.py`).
+- **Q4 collaboration states** — 4-bit encoding of collaboration phases,
+  following the GenesisAeon Q4 Runtime Contract (`q4_collaboration.py`).
+- **Session tracking** — records sessions, computes Fisher-Rao velocity
+  through coordination space, and warns if it exceeds `v_RIG`
+  (Package 31, `session_tracker.py`).
+
+All of these are tied together by `GenesisScope`, the Diamond-interface
+implementation in `system.py`.
+
+## Quickstart
 
 ```bash
-pip install diamond-setup
-# or
-uv tool install diamond-setup
-```
-
-## Usage
-
-```bash
-# New project with the minimal template (default)
-diamond scaffold my-lib
-
-# GenesisAeon preset (adds domains.yaml + entropy-table bridge)
-diamond scaffold my-physics-tool --template genesis --author "Ada Lovelace"
-
-# Preview what would be generated (no files written)
-diamond scaffold my-lib --dry-run
-
-# See all templates
-diamond list-templates
-
-# Validate any project directory
-diamond validate path/to/my-project
-diamond validate          # validates the current directory
-```
-
-## What you get
-
-Running `diamond scaffold my-lib` produces:
-
-```
-my-lib/
-├── src/
-│   └── my_lib/
-│       └── __init__.py       # __version__ = "0.1.0"
-├── tests/
-│   ├── __init__.py
-│   └── test_main.py
-├── .github/
-│   └── workflows/
-│       └── ci.yml            # matrix: 3.11 + 3.12
-├── pyproject.toml            # hatchling, ruff, pytest configured
-├── README.md
-├── AGENT.md                  # GenesisAeon release & metadata rules
-├── .gitignore
-└── .pre-commit-config.yaml   # ruff + standard hooks
-```
-
-Then just:
-
-```bash
-cd my-lib
 uv sync --dev
-pre-commit install
 uv run pytest
 ```
 
-## Templates
+```python
+from genesis_scope import GenesisScope
 
-| Template | Description |
-|----------|-------------|
-| `minimal` | Clean Python package for everyone |
-| `genesis` | Adds `domains.yaml` + entropy-table bridge (GenesisAeon preset) |
+scope = GenesisScope()
+result = scope.run_cycle(n_sessions=38)
 
-## Extending
+print(result["coherence_score"])   # Gamma_collab
+print(result["drift_status"])      # "stable" | "drifting" | "anchored"
+print(result["utac_state"])        # Sigma(t) + Q4 state
+```
 
-Adding a new template is one Python file. See [docs/templates.md](docs/templates.md).
+## CLI
+
+```bash
+scope status                  # run a cycle and print the scope status
+scope drift                   # simulate drift with/without anchors
+scope benchmark                # evaluate against SCOPE_TARGETS
+scope anchor                  # list registered semantic anchors (Sigillin)
+```
+
+## Development
+
+```bash
+uv sync --dev
+pre-commit install
+uv run ruff check .
+uv run mypy src
+uv run pytest
+```
+
+## Falsifiable prediction
+
+`Gamma_collab` for GenesisAeon sessions is hypothesised to lie in the
+critical regime `[0.2, 0.5]` (see `benchmark.py` / `SCOPE_TARGETS`). If
+real session data instead lands outside `[0.1, 0.8]`, the model needs
+revision.
 
 ---
 
-Built with [uv](https://docs.astral.sh/uv/) · [Typer](https://typer.tiangolo.com/) · [Rich](https://rich.readthedocs.io/)
+*GenesisAeon Package 39 · Johann Römer · MOR Research Collective · Mai 2026*
+*Reference: [10.5281/zenodo.17472834](https://doi.org/10.5281/zenodo.17472834)*

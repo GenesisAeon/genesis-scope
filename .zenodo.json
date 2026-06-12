@@ -1,0 +1,30 @@
+{
+  "title": "genesis-scope: Semantic Coordination System for Human-LLM Collaboration",
+  "description": "<p>genesis-scope (GenesisAeon Package 39) implements the semantic coordinate system that structures human-LLM collaboration. It models semantic anchors (Sigillin), a drift relaxation model dD/dt = -kappa*(D - D*), the (tau_A, tau_H, Sigma) coordination space, the collaboration CREP tensor Gamma_collab = (C*R*E*P)^(1/4), Q4 4-bit collaboration states, and session tracking against the v_RIG threshold (Package 31).</p>",
+  "creators": [
+    {
+      "name": "Römer, Johann",
+      "affiliation": "MOR Research Collective"
+    }
+  ],
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "MIT",
+  "keywords": [
+    "genesisaeon",
+    "crep",
+    "utac",
+    "semantic-anchors",
+    "human-ai-collaboration",
+    "information-geometry"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "10.5281/zenodo.17472834",
+      "relation": "isPartOf",
+      "resource_type": "publication-preprint"
+    }
+  ],
+  "version": "0.1.0",
+  "language": "eng"
+}
