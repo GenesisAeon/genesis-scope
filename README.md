@@ -5,6 +5,7 @@
 [![CI](https://github.com/GenesisAeon/genesis-scope/actions/workflows/ci.yml/badge.svg)](https://github.com/GenesisAeon/genesis-scope/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.17472834-blue)](https://doi.org/10.5281/zenodo.17472834)
 
 ---
 
