@@ -7,7 +7,14 @@ import json
 import typer
 
 from genesis_scope.benchmark import evaluate
-from genesis_scope.cartography import DEFAULT_MAP, SemanticMap, compare_maps
+from genesis_scope.cartography import (
+    DEFAULT_EVAPORATION_RATE,
+    DEFAULT_MAP,
+    DEFAULT_PHEROMONE_GAIN,
+    MIN_EDGE_WEIGHT,
+    SemanticMap,
+    compare_maps,
+)
 from genesis_scope.drift_model import DriftModel
 from genesis_scope.semantic_anchor import SemanticAnchor
 from genesis_scope.system import DEFAULT_ANCHORS, GenesisScope
@@ -112,6 +119,69 @@ def drift_map(previous: str, current: str) -> None:
         typer.echo(f"- edge {source} --{relation}--> {target}")
     for source, target, relation, old_weight, new_weight in report.reweighted_edges:
         typer.echo(f"~ edge {source} --{relation}--> {target}: {old_weight} -> {new_weight}")
+
+
+@app.command()
+def walk(
+    map_file: str,
+    actor: str,
+    nodes: list[str] = typer.Argument(
+        ..., help="Path through the map, e.g. crep governance diamond"
+    ),
+    gain: float = DEFAULT_PHEROMONE_GAIN,
+) -> None:
+    """Lay a pheromone trail along a path and save the reinforced map.
+
+    Strengthens every edge along the path by `gain` and records the
+    traversal, so frequently-walked routes stand out over time.
+    """
+    with open(map_file) as f:
+        semantic_map = SemanticMap.from_dict(json.load(f))
+
+    trace = semantic_map.walk(actor, nodes, gain=gain)
+
+    with open(map_file, "w") as f:
+        json.dump(semantic_map.to_dict(), f, indent=2)
+
+    typer.echo(f"{trace.actor} walked: {' -> '.join(trace.path)}")
+
+
+@app.command()
+def evaporate(
+    map_file: str, rate: float = DEFAULT_EVAPORATION_RATE, floor: float = MIN_EDGE_WEIGHT
+) -> None:
+    """Evaporate pheromones: decay all edge weights in a saved map and save it back.
+
+    Unused routes fade toward `floor` by a factor of `rate` per call,
+    so the map stays a living picture of what is actually walked.
+    """
+    with open(map_file) as f:
+        semantic_map = SemanticMap.from_dict(json.load(f))
+
+    semantic_map.evaporate(rate=rate, floor=floor)
+
+    with open(map_file, "w") as f:
+        json.dump(semantic_map.to_dict(), f, indent=2)
+
+    typer.echo(f"Evaporated {map_file} (rate={rate}, floor={floor})")
+
+
+@app.command()
+def trail(map_file: str) -> None:
+    """Print the pheromone trail recorded in a saved semantic map."""
+    with open(map_file) as f:
+        semantic_map = SemanticMap.from_dict(json.load(f))
+
+    if not semantic_map.trail:
+        typer.echo("No traces recorded yet.")
+        return
+
+    for trace in semantic_map.trail:
+        typer.echo(f"{trace.actor}: {' -> '.join(trace.path)}")
+
+    typer.echo("Footprints:")
+    for actor, count in semantic_map.footprints().items():
+        typer.echo(f"  {actor:20s} {count}")
 
 
 if __name__ == "__main__":
