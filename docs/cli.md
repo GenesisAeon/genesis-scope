@@ -55,3 +55,64 @@ ratio and strength.
 ```bash
 scope anchor
 ```
+
+---
+
+## `scope map`
+
+Print the semantic cartography: all nodes (concepts, states, agents,
+metrics, models) and the typed, weighted edges between them.
+
+```bash
+scope map
+```
+
+---
+
+## `scope trace`
+
+Trace an explicit path between two nodes of the semantic map.
+
+```
+Usage: scope trace [OPTIONS] START END
+```
+
+```bash
+scope trace crep agent_coordination
+scope trace quasicrystals scope
+```
+
+---
+
+## `scope attractors`
+
+Rank semantic nodes by attractor strength (weighted in-degree) — which
+concepts pull the most meaning toward them.
+
+```
+Usage: scope attractors [OPTIONS]
+
+Options:
+  --top-n INTEGER  Number of nodes to show [default: 5]
+```
+
+```bash
+scope attractors
+scope attractors --top-n 10
+```
+
+---
+
+## `scope drift-map`
+
+Compare two semantic map snapshots (JSON files produced by
+`SemanticMap.to_dict`) and report added/removed nodes and edges, and
+edges whose weight changed.
+
+```
+Usage: scope drift-map [OPTIONS] PREVIOUS CURRENT
+```
+
+```bash
+scope drift-map map_v1.json map_v2.json
+```

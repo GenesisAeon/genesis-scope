@@ -33,6 +33,10 @@ between these two asynchronous processes. It models:
 - **Session tracking** — records sessions, computes Fisher-Rao velocity
   through coordination space, and warns if it exceeds `v_RIG`
   (Package 31, `session_tracker.py`).
+- **Semantic cartography** — the navigable map of the GenesisAeon concept
+  space: typed nodes and edges, explicit paths between concepts, attractor
+  ranking, drift detection between map snapshots, and multi-agent
+  perspective comparison (`cartography.py`).
 
 All of these are tied together by `GenesisScope`, the Diamond-interface
 implementation in `system.py`.
@@ -62,6 +66,38 @@ scope status                  # run a cycle and print the scope status
 scope drift                   # simulate drift with/without anchors
 scope benchmark                # evaluate against SCOPE_TARGETS
 scope anchor                  # list registered semantic anchors (Sigillin)
+scope map                     # print the semantic cartography (nodes + edges)
+scope trace <start> <end>     # trace an explicit path through the map
+scope attractors               # rank concepts by attractor strength
+scope drift-map <old> <new>   # diff two semantic map snapshots
+```
+
+## Semantic cartography
+
+`genesis-scope` is the translation layer that projects domain knowledge
+(physics, governance, runtime, agents, entropy, mathematics) onto a
+navigable topography: explicit **nodes** (concepts, states, agents,
+metrics, models), typed **edges** (`influences`, `generates`,
+`stabilizes`, `contradicts`, `extends`, `abstracts`), and traceable
+**paths** between them.
+
+```python
+from genesis_scope import DEFAULT_MAP, compare_maps, compare_perspectives
+
+# An explicit path through the concept space
+DEFAULT_MAP.trace("crep", "agent_coordination")
+# ["crep", "governance", "diamond", "claim_system", "agent_coordination"]
+
+# Which concepts attract the most meaning?
+DEFAULT_MAP.attractors(top_n=3)
+# [("genesis_os", 1.65), ("scope", 1.5), ("unified_mandala", 1.4)]
+
+# Drift between two snapshots of the map over time
+report = compare_maps(previous_map, current_map)
+report.added_nodes, report.reweighted_edges
+
+# Where do different agents' maps of the same space agree or diverge?
+compare_perspectives({"claude": claude_map, "gemini": gemini_map})
 ```
 
 ## Development
