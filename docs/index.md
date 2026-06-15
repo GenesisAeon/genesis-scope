@@ -35,7 +35,7 @@ print(result["drift_status"])      # "stable" | "drifting" | "anchored"
 | `crep_collaboration.py` | `Gamma_collab = (C * R * E * P) ** 0.25` |
 | `q4_collaboration.py` | 4-bit Q4 state encoding for collaboration phases |
 | `session_tracker.py` | Session history, Fisher-Rao velocity, `v_RIG` warning |
-| `cartography.py` | Semantic map: nodes, typed edges, paths, attractors, drift |
+| `cartography.py` | Semantic map: nodes, typed edges, paths, attractors, drift, pheromone trails |
 | `system.py` | `GenesisScope` — Diamond interface |
 
 ## Commands
@@ -50,3 +50,6 @@ print(result["drift_status"])      # "stable" | "drifting" | "anchored"
 | `scope trace <start> <end>` | Trace an explicit path through the map |
 | `scope attractors` | Rank concepts by attractor strength |
 | `scope drift-map <old> <new>` | Diff two semantic map snapshots |
+| `scope walk <map.json> <actor> <nodes...>` | Lay a pheromone trail along a path |
+| `scope evaporate <map.json>` | Decay all edge weights (pheromone evaporation) |
+| `scope trail <map.json>` | Show the recorded pheromone trail and footprints |

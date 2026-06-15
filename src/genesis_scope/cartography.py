@@ -13,7 +13,11 @@ makes traces through it visible:
     Quasikristalle -> Informationsgeometrie -> Topologie -> Semantische
         Zustaende -> Scope
 
-and lets those traces be compared, ranked and diffed over time.
+and lets those traces be compared, ranked and diffed over time. A
+pheromone trail (`walk`, `evaporate`) lets the map respond to its own
+usage: paths that are actually walked by humans or agents get
+stronger, paths that fall out of use fade — turning the static
+topography into a living one.
 """
 
 from __future__ import annotations
@@ -22,6 +26,10 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
+
+DEFAULT_PHEROMONE_GAIN = 0.05
+DEFAULT_EVAPORATION_RATE = 0.95
+MIN_EDGE_WEIGHT = 0.01
 
 
 class NodeKind(StrEnum):
@@ -72,6 +80,18 @@ class SemanticEdge:
         return (self.source, self.target, self.relation.value)
 
 
+@dataclass(frozen=True)
+class PheromoneTrace:
+    """A single traversal recorded against a map — a footprint left by an actor.
+
+    `actor` identifies who walked the path (a human, an agent, a model
+    name); `path` is the sequence of node ids visited, in order.
+    """
+
+    actor: str
+    path: tuple[str, ...]
+
+
 @dataclass
 class SemanticMap:
     """A directed, typed graph of concepts, states, agents, metrics and models.
@@ -84,6 +104,7 @@ class SemanticMap:
     name: str = "default"
     nodes: dict[str, SemanticNode] = field(default_factory=dict)
     edges: list[SemanticEdge] = field(default_factory=list)
+    trail: list[PheromoneTrace] = field(default_factory=list)
 
     def add_node(self, node: SemanticNode) -> None:
         """Registers a node, keyed by its id."""
@@ -147,6 +168,69 @@ class SemanticMap:
         ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
         return ranked[:top_n]
 
+    def walk(
+        self, actor: str, path: list[str], gain: float = DEFAULT_PHEROMONE_GAIN
+    ) -> PheromoneTrace:
+        """Lays a pheromone trail along `path`, walked by `actor`.
+
+        Every directed edge connecting consecutive nodes in `path` has
+        `gain` added to its weight (clamped to 1.0) — the more often a
+        route is actually used, the stronger it stands out in the map.
+        The traversal itself is appended to `self.trail`, so usage
+        history (who walked where) can be inspected later.
+
+        Raises ValueError if `path` has fewer than two nodes, or if any
+        consecutive pair is not connected by an existing edge.
+        """
+        if len(path) < 2:
+            raise ValueError("path must contain at least two nodes")
+        if not 0.0 < gain <= 1.0:
+            raise ValueError("gain must be in (0, 1]")
+
+        for source, target in zip(path, path[1:], strict=False):
+            matches = [
+                i
+                for i, edge in enumerate(self.edges)
+                if edge.source == source and edge.target == target
+            ]
+            if not matches:
+                raise ValueError(f"no edge from '{source}' to '{target}'")
+            for i in matches:
+                edge = self.edges[i]
+                new_weight = min(1.0, edge.weight + gain)
+                self.edges[i] = SemanticEdge(edge.source, edge.target, edge.relation, new_weight)
+
+        trace = PheromoneTrace(actor=actor, path=tuple(path))
+        self.trail.append(trace)
+        return trace
+
+    def evaporate(
+        self, rate: float = DEFAULT_EVAPORATION_RATE, floor: float = MIN_EDGE_WEIGHT
+    ) -> None:
+        """Evaporates pheromones: decays every edge weight toward `floor`.
+
+        Each edge's weight is multiplied by `rate` (e.g. 0.95 retains
+        95% per step) but never drops below `floor`. Edges repeatedly
+        reinforced by `walk()` stay strong despite evaporation; edges
+        that fall out of use fade toward the floor — rare paths
+        gradually become faint without ever fully disappearing.
+        """
+        if not 0.0 < rate <= 1.0:
+            raise ValueError("rate must be in (0, 1]")
+        if not 0.0 <= floor <= 1.0:
+            raise ValueError("floor must be in [0, 1]")
+
+        for i, edge in enumerate(self.edges):
+            new_weight = max(floor, edge.weight * rate)
+            self.edges[i] = SemanticEdge(edge.source, edge.target, edge.relation, new_weight)
+
+    def footprints(self) -> dict[str, int]:
+        """Returns how many traversals each actor has recorded in `self.trail`."""
+        counts: dict[str, int] = {}
+        for trace in self.trail:
+            counts[trace.actor] = counts.get(trace.actor, 0) + 1
+        return counts
+
     def to_dict(self) -> dict[str, Any]:
         """Serializes this map to a JSON-compatible dict."""
         return {
@@ -163,6 +247,9 @@ class SemanticMap:
                     "weight": edge.weight,
                 }
                 for edge in self.edges
+            ],
+            "trail": [
+                {"actor": trace.actor, "path": list(trace.path)} for trace in self.trail
             ],
         }
 
@@ -182,6 +269,10 @@ class SemanticMap:
                     relation=RelationKind(edge["relation"]),
                     weight=edge.get("weight", 1.0),
                 )
+            )
+        for trace in data.get("trail", []):
+            semantic_map.trail.append(
+                PheromoneTrace(actor=trace["actor"], path=tuple(trace["path"]))
             )
         return semantic_map
 

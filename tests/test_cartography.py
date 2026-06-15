@@ -7,6 +7,7 @@ import pytest
 from genesis_scope.cartography import (
     DEFAULT_MAP,
     NodeKind,
+    PheromoneTrace,
     RelationKind,
     SemanticEdge,
     SemanticMap,
@@ -168,3 +169,110 @@ def test_default_map_attractors_include_scope_and_genesis_os():
     assert "genesis_os" in top_ids
     assert "scope" in top_ids
     assert "unified_mandala" in top_ids
+
+
+def test_walk_reinforces_edge_weight():
+    semantic_map = _two_node_map(weight=0.5)
+    trace = semantic_map.walk("agent1", ["a", "b"], gain=0.1)
+
+    assert semantic_map.edges[0].weight == pytest.approx(0.6)
+    assert trace == PheromoneTrace(actor="agent1", path=("a", "b"))
+    assert semantic_map.trail == [trace]
+
+
+def test_walk_clamps_weight_at_one():
+    semantic_map = _two_node_map(weight=0.95)
+    semantic_map.walk("agent1", ["a", "b"], gain=0.5)
+    assert semantic_map.edges[0].weight == pytest.approx(1.0)
+
+
+def test_walk_requires_at_least_two_nodes():
+    semantic_map = _two_node_map()
+    with pytest.raises(ValueError):
+        semantic_map.walk("agent1", ["a"])
+
+
+def test_walk_requires_gain_in_unit_interval():
+    semantic_map = _two_node_map()
+    with pytest.raises(ValueError):
+        semantic_map.walk("agent1", ["a", "b"], gain=0.0)
+    with pytest.raises(ValueError):
+        semantic_map.walk("agent1", ["a", "b"], gain=1.5)
+
+
+def test_walk_requires_connected_path():
+    semantic_map = _two_node_map()
+    with pytest.raises(ValueError):
+        semantic_map.walk("agent1", ["b", "a"])
+
+
+def test_walk_reinforces_all_matching_edges():
+    semantic_map = SemanticMap(name="m")
+    semantic_map.add_node(SemanticNode(id="a", label="A"))
+    semantic_map.add_node(SemanticNode(id="b", label="B"))
+    semantic_map.add_edge(SemanticEdge("a", "b", RelationKind.INFLUENCES, 0.5))
+    semantic_map.add_edge(SemanticEdge("a", "b", RelationKind.CONTRADICTS, 0.3))
+
+    semantic_map.walk("agent1", ["a", "b"], gain=0.1)
+
+    assert semantic_map.edges[0].weight == pytest.approx(0.6)
+    assert semantic_map.edges[1].weight == pytest.approx(0.4)
+
+
+def test_evaporate_decays_weight_toward_floor():
+    semantic_map = _two_node_map(weight=0.5)
+    semantic_map.evaporate(rate=0.8, floor=0.1)
+    assert semantic_map.edges[0].weight == pytest.approx(0.4)
+
+
+def test_evaporate_does_not_drop_below_floor():
+    semantic_map = _two_node_map(weight=0.05)
+    semantic_map.evaporate(rate=0.5, floor=0.1)
+    assert semantic_map.edges[0].weight == pytest.approx(0.1)
+
+
+def test_evaporate_requires_valid_rate_and_floor():
+    semantic_map = _two_node_map()
+    with pytest.raises(ValueError):
+        semantic_map.evaporate(rate=0.0)
+    with pytest.raises(ValueError):
+        semantic_map.evaporate(rate=1.5)
+    with pytest.raises(ValueError):
+        semantic_map.evaporate(floor=-0.1)
+    with pytest.raises(ValueError):
+        semantic_map.evaporate(floor=1.5)
+
+
+def test_reinforced_path_resists_evaporation_while_others_fade():
+    semantic_map = SemanticMap(name="m")
+    for node_id in ("a", "b", "c"):
+        semantic_map.add_node(SemanticNode(id=node_id, label=node_id.upper()))
+    semantic_map.add_edge(SemanticEdge("a", "b", RelationKind.INFLUENCES, 0.5))
+    semantic_map.add_edge(SemanticEdge("a", "c", RelationKind.INFLUENCES, 0.5))
+
+    for _ in range(5):
+        semantic_map.walk("agent1", ["a", "b"], gain=0.05)
+        semantic_map.evaporate(rate=0.95, floor=0.01)
+
+    walked = next(e for e in semantic_map.edges if e.target == "b")
+    unused = next(e for e in semantic_map.edges if e.target == "c")
+    assert walked.weight > unused.weight
+
+
+def test_footprints_counts_traversals_per_actor():
+    semantic_map = _two_node_map()
+    semantic_map.walk("agent1", ["a", "b"], gain=0.01)
+    semantic_map.walk("agent1", ["a", "b"], gain=0.01)
+    semantic_map.walk("human", ["a", "b"], gain=0.01)
+
+    assert semantic_map.footprints() == {"agent1": 2, "human": 1}
+
+
+def test_to_dict_from_dict_round_trips_trail():
+    semantic_map = _two_node_map()
+    semantic_map.walk("agent1", ["a", "b"], gain=0.1)
+
+    restored = SemanticMap.from_dict(semantic_map.to_dict())
+
+    assert restored.trail == semantic_map.trail
+    assert restored.edges[0].weight == pytest.approx(semantic_map.edges[0].weight)

@@ -116,3 +116,61 @@ Usage: scope drift-map [OPTIONS] PREVIOUS CURRENT
 ```bash
 scope drift-map map_v1.json map_v2.json
 ```
+
+---
+
+## `scope walk`
+
+Lay a pheromone trail along a path through a saved semantic map: every
+edge connecting consecutive nodes gets its weight increased by `gain`
+(clamped to 1.0), and the traversal is recorded in the map's trail.
+The updated map is written back to `map_file`.
+
+```
+Usage: scope walk [OPTIONS] MAP_FILE ACTOR NODES...
+
+Options:
+  --gain FLOAT  Reinforcement applied to each edge on the path [default: 0.05]
+```
+
+```bash
+scope walk map.json human crep governance diamond
+scope walk map.json claude crep scope --gain 0.1
+```
+
+---
+
+## `scope evaporate`
+
+Evaporate pheromones: decay every edge weight in a saved semantic map
+by `rate`, never dropping below `floor`, and write the map back.
+Routes that aren't reinforced by `scope walk` fade toward `floor` over
+repeated calls.
+
+```
+Usage: scope evaporate [OPTIONS] MAP_FILE
+
+Options:
+  --rate FLOAT   Multiplicative decay applied to every edge [default: 0.95]
+  --floor FLOAT  Minimum edge weight after decay [default: 0.01]
+```
+
+```bash
+scope evaporate map.json
+scope evaporate map.json --rate 0.9 --floor 0.05
+```
+
+---
+
+## `scope trail`
+
+Print the pheromone trail recorded in a saved semantic map: every
+traversal (who walked which path) and a per-actor footprint count.
+
+```
+Usage: scope trail [OPTIONS] MAP_FILE
+```
+
+```bash
+scope trail map.json
+```

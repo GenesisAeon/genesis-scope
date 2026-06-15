@@ -1,10 +1,14 @@
 """genesis-scope — semantic coordination system for human-LLM collaboration (Package 39)."""
 
 from genesis_scope.cartography import (
+    DEFAULT_EVAPORATION_RATE,
     DEFAULT_MAP,
+    DEFAULT_PHEROMONE_GAIN,
+    MIN_EDGE_WEIGHT,
     DriftReport,
     NodeKind,
     PerspectiveComparison,
+    PheromoneTrace,
     RelationKind,
     SemanticEdge,
     SemanticMap,
@@ -23,7 +27,10 @@ __version__ = "0.1.0"
 __author__ = "GenesisAeon"
 
 __all__ = [
+    "DEFAULT_EVAPORATION_RATE",
     "DEFAULT_MAP",
+    "DEFAULT_PHEROMONE_GAIN",
+    "MIN_EDGE_WEIGHT",
     "CollaborationCREP",
     "CoordinationPoint",
     "CoordinationSpace",
@@ -32,6 +39,7 @@ __all__ = [
     "GenesisScope",
     "NodeKind",
     "PerspectiveComparison",
+    "PheromoneTrace",
     "RelationKind",
     "SemanticAnchor",
     "SemanticEdge",
