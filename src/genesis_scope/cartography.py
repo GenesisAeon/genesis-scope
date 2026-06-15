@@ -18,6 +18,14 @@ pheromone trail (`walk`, `evaporate`) lets the map respond to its own
 usage: paths that are actually walked by humans or agents get
 stronger, paths that fall out of use fade — turning the static
 topography into a living one.
+
+Usage and quality are tracked as two separate dimensions. An edge's
+`weight` is its pheromone trail — how often the route is walked,
+regardless of outcome. Its `quality` is a reliability score that only
+moves when a walk is explicitly marked as successful or not. This
+keeps the busiest path from automatically becoming "the best path":
+a route can be frequent and unreliable, or rare and excellent, and
+`attractors(by=...)` can rank by either dimension.
 """
 
 from __future__ import annotations
@@ -64,16 +72,25 @@ class SemanticNode:
 
 @dataclass(frozen=True)
 class SemanticEdge:
-    """A typed, weighted, directed relation between two semantic nodes."""
+    """A typed, weighted, directed relation between two semantic nodes.
+
+    `weight` is the usage (pheromone) weight: how often this route is
+    walked. `quality` is a separate reliability score: how often walks
+    along this route were marked successful. The two are independent —
+    a heavily used edge is not necessarily a high-quality one.
+    """
 
     source: str
     target: str
     relation: RelationKind
     weight: float = 1.0
+    quality: float = 1.0
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.weight <= 1.0:
             raise ValueError("weight must be in [0, 1]")
+        if not 0.0 <= self.quality <= 1.0:
+            raise ValueError("quality must be in [0, 1]")
 
     def key(self) -> tuple[str, str, str]:
         """Returns the (source, target, relation) identity of this edge."""
@@ -152,30 +169,50 @@ class SemanticMap:
                     queue.append([*path, edge.target])
         return None
 
-    def attractors(self, top_n: int = 5) -> list[tuple[str, float]]:
+    def attractors(self, top_n: int = 5, by: str = "weight") -> list[tuple[str, float]]:
         """Ranks nodes by attractor strength (weighted in-degree).
 
-        Attractor strength of a node is the sum of the weights of all
-        edges pointing at it — how strongly other concepts are pulled
-        toward it. Returns the top `top_n` (node_id, score) pairs,
-        sorted descending by score, then ascending by node id.
+        Attractor strength of a node is the sum of either the usage
+        `weight` or the `quality` of all edges pointing at it — how
+        strongly other concepts are pulled toward it. `by` selects
+        which dimension to rank on: "weight" (the default) surfaces
+        the most-used attractors, "quality" surfaces the most reliable
+        ones. These can disagree: a frequently walked node need not be
+        a high-quality one. Returns the top `top_n` (node_id, score)
+        pairs, sorted descending by score, then ascending by node id.
         """
         if top_n < 1:
             raise ValueError("top_n must be >= 1")
+        if by not in ("weight", "quality"):
+            raise ValueError("by must be 'weight' or 'quality'")
         scores: dict[str, float] = dict.fromkeys(self.nodes, 0.0)
         for edge in self.edges:
-            scores[edge.target] += edge.weight
+            scores[edge.target] += edge.weight if by == "weight" else edge.quality
         ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
         return ranked[:top_n]
 
     def walk(
-        self, actor: str, path: list[str], gain: float = DEFAULT_PHEROMONE_GAIN
+        self,
+        actor: str,
+        path: list[str],
+        gain: float = DEFAULT_PHEROMONE_GAIN,
+        success: bool | None = True,
     ) -> PheromoneTrace:
         """Lays a pheromone trail along `path`, walked by `actor`.
 
         Every directed edge connecting consecutive nodes in `path` has
-        `gain` added to its weight (clamped to 1.0) — the more often a
-        route is actually used, the stronger it stands out in the map.
+        `gain` added to its usage `weight` (clamped to 1.0) — the more
+        often a route is actually used, the stronger it stands out in
+        the map. This happens regardless of `success`: usage tracks how
+        often a path is walked, not how well it went.
+
+        `success` separately moves each edge's `quality` toward 1.0
+        (on success) or 0.0 (on failure) by `gain`, clamped to [0, 1].
+        Pass `success=None` to record usage without affecting quality —
+        e.g. when an outcome wasn't observed. This keeps "frequently
+        used" and "good" as independent dimensions: a path can be
+        frequent and unreliable, or rare and excellent.
+
         The traversal itself is appended to `self.trail`, so usage
         history (who walked where) can be inspected later.
 
@@ -198,7 +235,15 @@ class SemanticMap:
             for i in matches:
                 edge = self.edges[i]
                 new_weight = min(1.0, edge.weight + gain)
-                self.edges[i] = SemanticEdge(edge.source, edge.target, edge.relation, new_weight)
+                if success is None:
+                    new_quality = edge.quality
+                elif success:
+                    new_quality = min(1.0, edge.quality + gain)
+                else:
+                    new_quality = max(0.0, edge.quality - gain)
+                self.edges[i] = SemanticEdge(
+                    edge.source, edge.target, edge.relation, new_weight, new_quality
+                )
 
         trace = PheromoneTrace(actor=actor, path=tuple(path))
         self.trail.append(trace)
@@ -222,7 +267,9 @@ class SemanticMap:
 
         for i, edge in enumerate(self.edges):
             new_weight = max(floor, edge.weight * rate)
-            self.edges[i] = SemanticEdge(edge.source, edge.target, edge.relation, new_weight)
+            self.edges[i] = SemanticEdge(
+                edge.source, edge.target, edge.relation, new_weight, edge.quality
+            )
 
     def footprints(self) -> dict[str, int]:
         """Returns how many traversals each actor has recorded in `self.trail`."""
@@ -245,6 +292,7 @@ class SemanticMap:
                     "target": edge.target,
                     "relation": edge.relation.value,
                     "weight": edge.weight,
+                    "quality": edge.quality,
                 }
                 for edge in self.edges
             ],
@@ -268,6 +316,7 @@ class SemanticMap:
                     target=edge["target"],
                     relation=RelationKind(edge["relation"]),
                     weight=edge.get("weight", 1.0),
+                    quality=edge.get("quality", 1.0),
                 )
             )
         for trace in data.get("trail", []):
@@ -282,7 +331,11 @@ class DriftReport:
     """The semantic drift between two snapshots of a `SemanticMap`.
 
     Captures where the map's meaning has shifted: nodes and edges
-    added or removed, and edges whose weight changed.
+    added or removed, edges whose usage `weight` changed
+    (`reweighted_edges`), and edges whose `quality` changed
+    (`requalified_edges`). The two are reported separately: a path can
+    become more used without becoming better, or more reliable without
+    becoming busier.
     """
 
     added_nodes: list[str]
@@ -290,6 +343,7 @@ class DriftReport:
     added_edges: list[tuple[str, str, str]]
     removed_edges: list[tuple[str, str, str]]
     reweighted_edges: list[tuple[str, str, str, float, float]]
+    requalified_edges: list[tuple[str, str, str, float, float]]
 
     def has_drift(self) -> bool:
         """Returns True if anything changed between the two snapshots."""
@@ -299,6 +353,7 @@ class DriftReport:
             or self.added_edges
             or self.removed_edges
             or self.reweighted_edges
+            or self.requalified_edges
         )
 
 
@@ -314,6 +369,8 @@ def compare_maps(previous: SemanticMap, current: SemanticMap) -> DriftReport:
 
     prev_edges = {edge.key(): edge.weight for edge in previous.edges}
     curr_edges = {edge.key(): edge.weight for edge in current.edges}
+    prev_quality = {edge.key(): edge.quality for edge in previous.edges}
+    curr_quality = {edge.key(): edge.quality for edge in current.edges}
 
     added_edges = sorted(key for key in curr_edges if key not in prev_edges)
     removed_edges = sorted(key for key in prev_edges if key not in curr_edges)
@@ -322,6 +379,11 @@ def compare_maps(previous: SemanticMap, current: SemanticMap) -> DriftReport:
         for key in prev_edges
         if key in curr_edges and prev_edges[key] != curr_edges[key]
     )
+    requalified_edges = sorted(
+        (*key, prev_quality[key], curr_quality[key])
+        for key in prev_quality
+        if key in curr_quality and prev_quality[key] != curr_quality[key]
+    )
 
     return DriftReport(
         added_nodes=added_nodes,
@@ -329,6 +391,7 @@ def compare_maps(previous: SemanticMap, current: SemanticMap) -> DriftReport:
         added_edges=added_edges,
         removed_edges=removed_edges,
         reweighted_edges=reweighted_edges,
+        requalified_edges=requalified_edges,
     )
 
 

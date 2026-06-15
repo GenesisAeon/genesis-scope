@@ -75,7 +75,10 @@ def show_map() -> None:
         typer.echo(f"  {node.id:20s} [{node.kind.value:7s}] {node.label}")
     typer.echo("Edges:")
     for edge in semantic_map.edges:
-        typer.echo(f"  {edge.source} --{edge.relation.value}--> {edge.target} (w={edge.weight})")
+        typer.echo(
+            f"  {edge.source} --{edge.relation.value}--> {edge.target} "
+            f"(w={edge.weight}, q={edge.quality})"
+        )
 
 
 @app.command()
@@ -89,9 +92,14 @@ def trace(start: str, end: str) -> None:
 
 
 @app.command()
-def attractors(top_n: int = 5) -> None:
+def attractors(
+    top_n: int = 5,
+    by: str = typer.Option(
+        "weight", help="Rank by usage 'weight' (most-used) or 'quality' (most reliable)."
+    ),
+) -> None:
     """Rank semantic nodes by attractor strength (weighted in-degree)."""
-    for node_id, score in DEFAULT_MAP.attractors(top_n=top_n):
+    for node_id, score in DEFAULT_MAP.attractors(top_n=top_n, by=by):
         label = DEFAULT_MAP.nodes[node_id].label
         typer.echo(f"{node_id:20s} {label:25s} score={score:.2f}")
 
@@ -118,7 +126,9 @@ def drift_map(previous: str, current: str) -> None:
     for source, target, relation in report.removed_edges:
         typer.echo(f"- edge {source} --{relation}--> {target}")
     for source, target, relation, old_weight, new_weight in report.reweighted_edges:
-        typer.echo(f"~ edge {source} --{relation}--> {target}: {old_weight} -> {new_weight}")
+        typer.echo(f"~ edge {source} --{relation}--> {target}: w {old_weight} -> {new_weight}")
+    for source, target, relation, old_quality, new_quality in report.requalified_edges:
+        typer.echo(f"~ edge {source} --{relation}--> {target}: q {old_quality} -> {new_quality}")
 
 
 @app.command()
@@ -129,16 +139,23 @@ def walk(
         ..., help="Path through the map, e.g. crep governance diamond"
     ),
     gain: float = DEFAULT_PHEROMONE_GAIN,
+    success: bool = typer.Option(
+        True,
+        "--success/--failure",
+        help="Whether this traversal succeeded; updates edge quality, separately from usage.",
+    ),
 ) -> None:
     """Lay a pheromone trail along a path and save the reinforced map.
 
-    Strengthens every edge along the path by `gain` and records the
-    traversal, so frequently-walked routes stand out over time.
+    Strengthens every edge's usage weight along the path by `gain` and
+    records the traversal, so frequently-walked routes stand out over
+    time. `--success/--failure` separately nudges each edge's quality,
+    so a busy path doesn't automatically count as a good one.
     """
     with open(map_file) as f:
         semantic_map = SemanticMap.from_dict(json.load(f))
 
-    trace = semantic_map.walk(actor, nodes, gain=gain)
+    trace = semantic_map.walk(actor, nodes, gain=gain, success=success)
 
     with open(map_file, "w") as f:
         json.dump(semantic_map.to_dict(), f, indent=2)
