@@ -1,0 +1,344 @@
+"""Semantic cartography — the navigable map of the GenesisAeon concept space.
+
+genesis-scope's role is the translation layer between the ecosystem's
+domains (physics, biology, governance, runtime, agents, entropy,
+mathematics) and a navigable semantic topography: explicit nodes,
+typed relations between them, traceable paths, attractor concepts, and
+drift between snapshots of the map.
+
+This module does not try to explain the latent space exhaustively. It
+makes traces through it visible:
+
+    CREP -> Governance -> Diamond -> Claim-System -> Agentenkoordination
+    Quasikristalle -> Informationsgeometrie -> Topologie -> Semantische
+        Zustaende -> Scope
+
+and lets those traces be compared, ranked and diffed over time.
+"""
+
+from __future__ import annotations
+
+from collections import deque
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import Any
+
+
+class NodeKind(StrEnum):
+    """The kind of thing a semantic node represents."""
+
+    CONCEPT = "concept"
+    STATE = "state"
+    AGENT = "agent"
+    METRIC = "metric"
+    MODEL = "model"
+
+
+class RelationKind(StrEnum):
+    """The kind of relation a semantic edge represents."""
+
+    INFLUENCES = "influences"
+    GENERATES = "generates"
+    STABILIZES = "stabilizes"
+    CONTRADICTS = "contradicts"
+    EXTENDS = "extends"
+    ABSTRACTS = "abstracts"
+
+
+@dataclass(frozen=True)
+class SemanticNode:
+    """A node in the semantic map: a concept, state, agent, metric or model."""
+
+    id: str
+    label: str
+    kind: NodeKind = NodeKind.CONCEPT
+
+
+@dataclass(frozen=True)
+class SemanticEdge:
+    """A typed, weighted, directed relation between two semantic nodes."""
+
+    source: str
+    target: str
+    relation: RelationKind
+    weight: float = 1.0
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.weight <= 1.0:
+            raise ValueError("weight must be in [0, 1]")
+
+    def key(self) -> tuple[str, str, str]:
+        """Returns the (source, target, relation) identity of this edge."""
+        return (self.source, self.target, self.relation.value)
+
+
+@dataclass
+class SemanticMap:
+    """A directed, typed graph of concepts, states, agents, metrics and models.
+
+    This is the navigable topography genesis-scope projects domain
+    knowledge onto: nodes are the landmarks, edges are the (typed,
+    weighted) routes between them.
+    """
+
+    name: str = "default"
+    nodes: dict[str, SemanticNode] = field(default_factory=dict)
+    edges: list[SemanticEdge] = field(default_factory=list)
+
+    def add_node(self, node: SemanticNode) -> None:
+        """Registers a node, keyed by its id."""
+        self.nodes[node.id] = node
+
+    def add_edge(self, edge: SemanticEdge) -> None:
+        """Registers an edge. Both endpoints must already be registered nodes."""
+        if edge.source not in self.nodes:
+            raise ValueError(f"unknown source node: {edge.source}")
+        if edge.target not in self.nodes:
+            raise ValueError(f"unknown target node: {edge.target}")
+        self.edges.append(edge)
+
+    def outgoing(self, node_id: str) -> list[SemanticEdge]:
+        """Returns all edges starting at `node_id`."""
+        return [edge for edge in self.edges if edge.source == node_id]
+
+    def incoming(self, node_id: str) -> list[SemanticEdge]:
+        """Returns all edges ending at `node_id`."""
+        return [edge for edge in self.edges if edge.target == node_id]
+
+    def trace(self, start: str, end: str) -> list[str] | None:
+        """Returns an explicit path of node ids from `start` to `end`.
+
+        Finds the shortest directed path (by number of edges, BFS) and
+        returns it as a list of node ids, e.g. ["crep", "governance",
+        "diamond"]. Returns None if no path exists.
+        """
+        if start not in self.nodes:
+            raise ValueError(f"unknown node id: {start}")
+        if end not in self.nodes:
+            raise ValueError(f"unknown node id: {end}")
+        if start == end:
+            return [start]
+
+        visited = {start}
+        queue: deque[list[str]] = deque([[start]])
+        while queue:
+            path = queue.popleft()
+            for edge in self.outgoing(path[-1]):
+                if edge.target == end:
+                    return [*path, end]
+                if edge.target not in visited:
+                    visited.add(edge.target)
+                    queue.append([*path, edge.target])
+        return None
+
+    def attractors(self, top_n: int = 5) -> list[tuple[str, float]]:
+        """Ranks nodes by attractor strength (weighted in-degree).
+
+        Attractor strength of a node is the sum of the weights of all
+        edges pointing at it — how strongly other concepts are pulled
+        toward it. Returns the top `top_n` (node_id, score) pairs,
+        sorted descending by score, then ascending by node id.
+        """
+        if top_n < 1:
+            raise ValueError("top_n must be >= 1")
+        scores: dict[str, float] = dict.fromkeys(self.nodes, 0.0)
+        for edge in self.edges:
+            scores[edge.target] += edge.weight
+        ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+        return ranked[:top_n]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializes this map to a JSON-compatible dict."""
+        return {
+            "name": self.name,
+            "nodes": [
+                {"id": node.id, "label": node.label, "kind": node.kind.value}
+                for node in self.nodes.values()
+            ],
+            "edges": [
+                {
+                    "source": edge.source,
+                    "target": edge.target,
+                    "relation": edge.relation.value,
+                    "weight": edge.weight,
+                }
+                for edge in self.edges
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SemanticMap:
+        """Deserializes a map from a dict produced by `to_dict`."""
+        semantic_map = cls(name=data.get("name", "default"))
+        for node in data.get("nodes", []):
+            semantic_map.add_node(
+                SemanticNode(id=node["id"], label=node["label"], kind=NodeKind(node["kind"]))
+            )
+        for edge in data.get("edges", []):
+            semantic_map.add_edge(
+                SemanticEdge(
+                    source=edge["source"],
+                    target=edge["target"],
+                    relation=RelationKind(edge["relation"]),
+                    weight=edge.get("weight", 1.0),
+                )
+            )
+        return semantic_map
+
+
+@dataclass(frozen=True)
+class DriftReport:
+    """The semantic drift between two snapshots of a `SemanticMap`.
+
+    Captures where the map's meaning has shifted: nodes and edges
+    added or removed, and edges whose weight changed.
+    """
+
+    added_nodes: list[str]
+    removed_nodes: list[str]
+    added_edges: list[tuple[str, str, str]]
+    removed_edges: list[tuple[str, str, str]]
+    reweighted_edges: list[tuple[str, str, str, float, float]]
+
+    def has_drift(self) -> bool:
+        """Returns True if anything changed between the two snapshots."""
+        return bool(
+            self.added_nodes
+            or self.removed_nodes
+            or self.added_edges
+            or self.removed_edges
+            or self.reweighted_edges
+        )
+
+
+def compare_maps(previous: SemanticMap, current: SemanticMap) -> DriftReport:
+    """Compares two snapshots of a semantic map and reports the drift.
+
+    `previous` is the earlier snapshot, `current` the later one.
+    """
+    prev_ids = set(previous.nodes)
+    curr_ids = set(current.nodes)
+    added_nodes = sorted(curr_ids - prev_ids)
+    removed_nodes = sorted(prev_ids - curr_ids)
+
+    prev_edges = {edge.key(): edge.weight for edge in previous.edges}
+    curr_edges = {edge.key(): edge.weight for edge in current.edges}
+
+    added_edges = sorted(key for key in curr_edges if key not in prev_edges)
+    removed_edges = sorted(key for key in prev_edges if key not in curr_edges)
+    reweighted_edges = sorted(
+        (*key, prev_edges[key], curr_edges[key])
+        for key in prev_edges
+        if key in curr_edges and prev_edges[key] != curr_edges[key]
+    )
+
+    return DriftReport(
+        added_nodes=added_nodes,
+        removed_nodes=removed_nodes,
+        added_edges=added_edges,
+        removed_edges=removed_edges,
+        reweighted_edges=reweighted_edges,
+    )
+
+
+@dataclass(frozen=True)
+class PerspectiveComparison:
+    """The result of comparing multiple agents' maps of the same space.
+
+    `shared_*` are the nodes/edges every perspective agrees on.
+    `unique_*` are, per perspective name, the nodes/edges only that
+    perspective sees.
+    """
+
+    shared_nodes: list[str]
+    unique_nodes: dict[str, list[str]]
+    shared_edges: list[tuple[str, str, str]]
+    unique_edges: dict[str, list[tuple[str, str, str]]]
+
+
+def compare_perspectives(maps: dict[str, SemanticMap]) -> PerspectiveComparison:
+    """Compares multiple named semantic maps of the same concept space.
+
+    Each entry in `maps` is one perspective (e.g. one agent's or one
+    model's cartography of the same domain). Returns the nodes and
+    edges shared by all perspectives, and those unique to each one.
+    """
+    if len(maps) < 2:
+        raise ValueError("compare_perspectives requires at least two maps")
+
+    node_sets = {name: set(m.nodes) for name, m in maps.items()}
+    shared_nodes = sorted(set.intersection(*node_sets.values()))
+    unique_nodes = {
+        name: sorted(ids - set().union(*(s for other, s in node_sets.items() if other != name)))
+        for name, ids in node_sets.items()
+    }
+
+    edge_sets = {name: {edge.key() for edge in m.edges} for name, m in maps.items()}
+    shared_edges = sorted(set.intersection(*edge_sets.values()))
+    unique_edges = {
+        name: sorted(
+            keys - set().union(*(s for other, s in edge_sets.items() if other != name))
+        )
+        for name, keys in edge_sets.items()
+    }
+
+    return PerspectiveComparison(
+        shared_nodes=shared_nodes,
+        unique_nodes=unique_nodes,
+        shared_edges=shared_edges,
+        unique_edges=unique_edges,
+    )
+
+
+def _build_default_map() -> SemanticMap:
+    """Builds the seed cartography of the GenesisAeon ecosystem.
+
+    Encodes two example traces through the concept space:
+
+        CREP -> Governance -> Diamond -> Claim-System -> Agentenkoordination
+        Quasikristalle -> Informationsgeometrie -> Topologie ->
+            Semantische Zustaende -> Scope
+
+    plus the cross-links that make Scope, GenesisOS, Diamond and the
+    Unified Mandala attractors in the map.
+    """
+    semantic_map = SemanticMap(name="genesisaeon")
+
+    for node in (
+        SemanticNode(id="crep", label="CREP", kind=NodeKind.METRIC),
+        SemanticNode(id="governance", label="Governance", kind=NodeKind.CONCEPT),
+        SemanticNode(id="diamond", label="Diamond", kind=NodeKind.MODEL),
+        SemanticNode(id="claim_system", label="Claim-System", kind=NodeKind.CONCEPT),
+        SemanticNode(id="agent_coordination", label="Agentenkoordination", kind=NodeKind.AGENT),
+        SemanticNode(id="quasicrystals", label="Quasikristalle", kind=NodeKind.CONCEPT),
+        SemanticNode(id="info_geometry", label="Informationsgeometrie", kind=NodeKind.CONCEPT),
+        SemanticNode(id="topology", label="Topologie", kind=NodeKind.CONCEPT),
+        SemanticNode(id="semantic_states", label="Semantische Zustaende", kind=NodeKind.STATE),
+        SemanticNode(id="scope", label="Scope", kind=NodeKind.MODEL),
+        SemanticNode(id="genesis_os", label="GenesisOS", kind=NodeKind.MODEL),
+        SemanticNode(id="unified_mandala", label="Unified Mandala", kind=NodeKind.CONCEPT),
+    ):
+        semantic_map.add_node(node)
+
+    for edge in (
+        SemanticEdge("crep", "governance", RelationKind.INFLUENCES, 0.9),
+        SemanticEdge("governance", "diamond", RelationKind.GENERATES, 0.85),
+        SemanticEdge("diamond", "claim_system", RelationKind.GENERATES, 0.8),
+        SemanticEdge("claim_system", "agent_coordination", RelationKind.STABILIZES, 0.75),
+        SemanticEdge("agent_coordination", "crep", RelationKind.INFLUENCES, 0.6),
+        SemanticEdge("quasicrystals", "info_geometry", RelationKind.ABSTRACTS, 0.8),
+        SemanticEdge("info_geometry", "topology", RelationKind.ABSTRACTS, 0.8),
+        SemanticEdge("topology", "semantic_states", RelationKind.GENERATES, 0.85),
+        SemanticEdge("semantic_states", "scope", RelationKind.EXTENDS, 0.9),
+        SemanticEdge("crep", "scope", RelationKind.INFLUENCES, 0.6),
+        SemanticEdge("agent_coordination", "genesis_os", RelationKind.INFLUENCES, 0.8),
+        SemanticEdge("scope", "genesis_os", RelationKind.STABILIZES, 0.85),
+        SemanticEdge("diamond", "unified_mandala", RelationKind.EXTENDS, 0.7),
+        SemanticEdge("scope", "unified_mandala", RelationKind.EXTENDS, 0.7),
+    ):
+        semantic_map.add_edge(edge)
+
+    return semantic_map
+
+
+DEFAULT_MAP: SemanticMap = _build_default_map()
