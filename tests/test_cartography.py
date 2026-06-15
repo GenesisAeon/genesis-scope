@@ -30,6 +30,16 @@ def test_edge_weight_must_be_in_unit_interval():
         SemanticEdge("a", "b", RelationKind.INFLUENCES, 1.5)
 
 
+def test_edge_quality_must_be_in_unit_interval():
+    with pytest.raises(ValueError):
+        SemanticEdge("a", "b", RelationKind.INFLUENCES, 0.5, quality=1.5)
+
+
+def test_edge_quality_defaults_to_one():
+    edge = SemanticEdge("a", "b", RelationKind.INFLUENCES)
+    assert edge.quality == pytest.approx(1.0)
+
+
 def test_add_edge_requires_known_nodes():
     semantic_map = SemanticMap()
     semantic_map.add_node(SemanticNode(id="a", label="A"))
@@ -84,6 +94,24 @@ def test_attractors_top_n_must_be_positive():
         semantic_map.attractors(top_n=0)
 
 
+def test_attractors_invalid_by_raises():
+    semantic_map = _two_node_map()
+    with pytest.raises(ValueError):
+        semantic_map.attractors(by="popularity")
+
+
+def test_attractors_by_quality_can_diverge_from_by_weight():
+    semantic_map = SemanticMap()
+    for node_id in ("a", "b", "c"):
+        semantic_map.add_node(SemanticNode(id=node_id, label=node_id.upper()))
+    # "b" is the most-used target, but "c" is reached by the highest-quality edge.
+    semantic_map.add_edge(SemanticEdge("a", "b", RelationKind.INFLUENCES, 0.9, quality=0.2))
+    semantic_map.add_edge(SemanticEdge("a", "c", RelationKind.INFLUENCES, 0.3, quality=0.9))
+
+    assert semantic_map.attractors(top_n=1, by="weight")[0][0] == "b"
+    assert semantic_map.attractors(top_n=1, by="quality")[0][0] == "c"
+
+
 def test_to_dict_from_dict_round_trip():
     semantic_map = _two_node_map(weight=0.7)
     restored = SemanticMap.from_dict(semantic_map.to_dict())
@@ -93,6 +121,17 @@ def test_to_dict_from_dict_round_trip():
     assert restored.nodes["a"].kind == NodeKind.CONCEPT
     assert [e.key() for e in restored.edges] == [e.key() for e in semantic_map.edges]
     assert restored.edges[0].weight == pytest.approx(0.7)
+
+
+def test_to_dict_from_dict_round_trips_quality():
+    semantic_map = SemanticMap(name="m")
+    semantic_map.add_node(SemanticNode(id="a", label="A"))
+    semantic_map.add_node(SemanticNode(id="b", label="B"))
+    semantic_map.add_edge(SemanticEdge("a", "b", RelationKind.INFLUENCES, 0.7, quality=0.4))
+
+    restored = SemanticMap.from_dict(semantic_map.to_dict())
+
+    assert restored.edges[0].quality == pytest.approx(0.4)
 
 
 def test_compare_maps_detects_added_and_removed():
@@ -123,6 +162,25 @@ def test_compare_maps_detects_reweighted_edge():
     assert report.added_edges == []
     assert report.removed_edges == []
     assert report.reweighted_edges == [("a", "b", "influences", 0.5, 0.9)]
+    assert report.requalified_edges == []
+
+
+def test_compare_maps_detects_requalified_edge():
+    previous = SemanticMap(name="m")
+    previous.add_node(SemanticNode(id="a", label="A"))
+    previous.add_node(SemanticNode(id="b", label="B"))
+    previous.add_edge(SemanticEdge("a", "b", RelationKind.INFLUENCES, 0.5, quality=0.5))
+
+    current = SemanticMap(name="m")
+    current.add_node(SemanticNode(id="a", label="A"))
+    current.add_node(SemanticNode(id="b", label="B"))
+    current.add_edge(SemanticEdge("a", "b", RelationKind.INFLUENCES, 0.5, quality=0.9))
+
+    report = compare_maps(previous, current)
+
+    assert report.reweighted_edges == []
+    assert report.requalified_edges == [("a", "b", "influences", 0.5, 0.9)]
+    assert report.has_drift()
 
 
 def test_compare_maps_no_drift():
@@ -219,6 +277,47 @@ def test_walk_reinforces_all_matching_edges():
     assert semantic_map.edges[1].weight == pytest.approx(0.4)
 
 
+def test_walk_success_increases_quality():
+    semantic_map = _two_node_map(weight=0.5)
+    semantic_map.walk("agent1", ["a", "b"], gain=0.1, success=True)
+
+    assert semantic_map.edges[0].weight == pytest.approx(0.6)
+    assert semantic_map.edges[0].quality == pytest.approx(1.0)
+
+
+def test_walk_failure_decreases_quality_without_reducing_usage():
+    semantic_map = _two_node_map(weight=0.5)
+    semantic_map.walk("agent1", ["a", "b"], gain=0.1, success=False)
+
+    assert semantic_map.edges[0].weight == pytest.approx(0.6)
+    assert semantic_map.edges[0].quality == pytest.approx(0.9)
+
+
+def test_walk_without_outcome_leaves_quality_unchanged():
+    semantic_map = _two_node_map(weight=0.5)
+    semantic_map.walk("agent1", ["a", "b"], gain=0.1, success=None)
+
+    assert semantic_map.edges[0].weight == pytest.approx(0.6)
+    assert semantic_map.edges[0].quality == pytest.approx(1.0)
+
+
+def test_frequent_path_can_have_lower_quality_than_rare_path():
+    semantic_map = SemanticMap(name="m")
+    for node_id in ("a", "b", "c"):
+        semantic_map.add_node(SemanticNode(id=node_id, label=node_id.upper()))
+    semantic_map.add_edge(SemanticEdge("a", "b", RelationKind.INFLUENCES, 0.5, quality=0.5))
+    semantic_map.add_edge(SemanticEdge("a", "c", RelationKind.INFLUENCES, 0.5, quality=0.5))
+
+    for _ in range(3):
+        semantic_map.walk("agent1", ["a", "b"], gain=0.1, success=False)
+    semantic_map.walk("agent1", ["a", "c"], gain=0.1, success=True)
+
+    frequent = next(e for e in semantic_map.edges if e.target == "b")
+    rare = next(e for e in semantic_map.edges if e.target == "c")
+    assert frequent.weight > rare.weight
+    assert frequent.quality < rare.quality
+
+
 def test_evaporate_decays_weight_toward_floor():
     semantic_map = _two_node_map(weight=0.5)
     semantic_map.evaporate(rate=0.8, floor=0.1)
@@ -229,6 +328,17 @@ def test_evaporate_does_not_drop_below_floor():
     semantic_map = _two_node_map(weight=0.05)
     semantic_map.evaporate(rate=0.5, floor=0.1)
     assert semantic_map.edges[0].weight == pytest.approx(0.1)
+
+
+def test_evaporate_does_not_affect_quality():
+    semantic_map = SemanticMap(name="m")
+    semantic_map.add_node(SemanticNode(id="a", label="A"))
+    semantic_map.add_node(SemanticNode(id="b", label="B"))
+    semantic_map.add_edge(SemanticEdge("a", "b", RelationKind.INFLUENCES, 0.5, quality=0.3))
+
+    semantic_map.evaporate(rate=0.8, floor=0.1)
+
+    assert semantic_map.edges[0].quality == pytest.approx(0.3)
 
 
 def test_evaporate_requires_valid_rate_and_floor():
