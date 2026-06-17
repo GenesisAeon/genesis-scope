@@ -22,9 +22,13 @@
     {
       "identifier": "10.5281/zenodo.17472834",
       "relation": "isPartOf",
-      "resource_type": "publication-preprint"
+      "resource_type": "publication-preprint",
+      "scheme": "doi"
     }
   ],
-  "version": "0.1.0",
-  "language": "eng"
+  "version": "1.0.0",
+  "language": "eng",
+  "communities": [
+    { "identifier": "genesisaeon" }
+  ]
 }

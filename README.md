@@ -41,6 +41,12 @@ between these two asynchronous processes. It models:
 All of these are tied together by `GenesisScope`, the Diamond-interface
 implementation in `system.py`.
 
+## Installation
+
+```bash
+pip install genesis-scope
+```
+
 ## Quickstart
 
 ```bash
@@ -116,6 +122,23 @@ uv run pytest
 critical regime `[0.2, 0.5]` (see `benchmark.py` / `SCOPE_TARGETS`). If
 real session data instead lands outside `[0.1, 0.8]`, the model needs
 revision.
+
+## Role in the GenesisAeon Ecosystem
+
+`genesis-scope` is Package **P39** of the GenesisAeon ecosystem, in the
+**meta-collaboration / semantic cartography** domain. It is the human-AI
+navigation layer: the explicit, executable geometry that tracks
+collaboration coherence (`Gamma_collab`), semantic drift, and the
+navigable concept map shared across the other GenesisAeon packages.
+
+## Citation
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.PLACEHOLDER.svg)](https://doi.org/10.5281/zenodo.PLACEHOLDER)
+
+DOI will be assigned automatically on first GitHub Release once
+Zenodo–GitHub integration is enabled for this repo. Until then, cite the
+existing concept DOI:
+[10.5281/zenodo.17472834](https://doi.org/10.5281/zenodo.17472834).
 
 ---
 
